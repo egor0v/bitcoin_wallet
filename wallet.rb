@@ -47,9 +47,9 @@ module Wallet
     end
     
     return {
-      "confirmed": confirmed,
-      "unconfirmed": unconfirmed,
-      "total": unconfirmed + confirmed
+      confirmed: confirmed.to_f,
+      unconfirmed: unconfirmed.to_f,
+      total: (unconfirmed + confirmed).to_f
     }
   end
 
@@ -114,41 +114,37 @@ module Wallet
     puts "INFO: Payment amount: #{payment_amount}"
 
     # Собираем транзакцию
+    tx = build_tx do |t|      
+      relevant_utxos.each do |utxo|
+        t.input do |i|
+          i.prev_out utxo.dig(:tx)
+          i.prev_out_index utxo.dig(:vout)
+          i.signature_key source_account_key
+        end
+      end
 
-    tx = Bitcoin::Protocol::Tx.new
-
-    relevant_utxos.each{|utxo| tx.add_in(Bitcoin::Protocol::TxIn.from_hex_hash(utxo[:tx].hash, utxo[:vout])) }
-
-    tx.add_out(Bitcoin::Protocol::TxOut.value_to_address(payment_amount.to_i, destination_address))
-    # Возвращаем лишние монеты обратно (не учитывая комиссию)
-    if withdrawal_amount > (payment_amount + total_fee)
-      tx.add_out(Bitcoin::P::TxOut.value_to_address((withdrawal_amount - payment_amount - total_fee).to_i, source_account_key.addr))
-    end
-
-    # Подписываем транзакции
-    all_verified = true
-    relevant_utxos.each.with_index do |utxo, index|
-      sig = Bitcoin.sign_data(source_account_key.key, tx.signature_hash_for_input(index, utxo[:tx]))
-      tx.in[index].add_signature_pubkey_script(sig, source_account_key.pub)
-
-      unless tx.verify_input_signature(index, utxo[:tx])
-        all_verified = false
-        break
+      t.output do |o|
+        o.value payment_amount.to_i
+        o.script {|s| s.recipient destination_address }
+      end
+      
+      # Возвращаем лишние монеты обратно (не учитывая комиссию)
+      if withdrawal_amount > (payment_amount + total_fee)
+        t.output do |o|
+          o.value (withdrawal_amount - payment_amount - total_fee).to_i
+          o.script {|s| s.recipient source_account_key.addr }
+        end
       end
     end
 
     # Отправляем транзакцию, если подпись удалась
-    if all_verified
-      hex = tx.to_payload.unpack("H*")[0]
+    hex = tx.to_payload.unpack("H*")[0]
 
-      response = HTTP.post("https://blockstream.info/testnet/api/tx", :body => hex)
-      if response.status == 200
-        puts "INFO: TRANSACTION CREATED TXID: #{response.body.to_s}"
-      else
-        puts "ERROR: TRANSACTION CREATION FAILED: #{response.body.to_s}"
-      end
+    response = HTTP.post("https://blockstream.info/testnet/api/tx", :body => hex)
+    if response.status == 200
+      puts "INFO: TRANSACTION CREATED TXID: #{response.body.to_s}"
     else
-      puts "ERROR: VERIFICATION FAILED"
+      puts "ERROR: TRANSACTION CREATION FAILED: #{response.body.to_s}"
     end
   end
 
@@ -157,9 +153,9 @@ module Wallet
 
     result = self.calculate_balance(address)
     puts "=============Address balance========"
-    puts "Confirmed: #{result[:confirmed].to_f / SATOSHI_PER_BITCOIN}"
-    puts "Unconfirmed: #{result[:unconfirmed].to_f / SATOSHI_PER_BITCOIN}"
-    puts "Total: #{result[:total].to_f / SATOSHI_PER_BITCOIN}"
+    puts "Confirmed: #{result.dig(:confirmed) / SATOSHI_PER_BITCOIN}"
+    puts "Unconfirmed: #{result.dig(:unconfirmed) / SATOSHI_PER_BITCOIN}"
+    puts "Total: #{result.dig(:total) / SATOSHI_PER_BITCOIN}"
     puts "===================================="
   end
 

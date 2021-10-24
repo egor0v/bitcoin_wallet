@@ -53,7 +53,7 @@ module Wallet
     }
   end
 
-  def get_current_fee
+  def fetch_current_fee
     url = "https://blockstream.info/testnet/api/mempool"
 
     return JSON.parse(URI.open(url).string)["fee_histogram"][0][0] * 1.0 rescue 1.0
@@ -69,7 +69,7 @@ module Wallet
     
     available_utxos = self.utxos(source_account_key.addr).sort{|a,b| b["value"] - a["value"]} # Чем меньше входов - тем дешевле, сортируем по сумме
     
-    fee_rate = self.get_current_fee
+    fee_rate = self.fetch_current_fee
     payment_amount = amount.to_f * SATOSHI_PER_BITCOIN
 
     withdrawal_amount = 0

@@ -2,6 +2,6 @@ version: '3'
 services:
   wallet:
     entrypoint: ruby ./wallet.rb
-    image: wallet:latest
+    build: .
     volumes:
       - "./wallets:/usr/src/wallet/wallets"
